@@ -14,6 +14,7 @@ import (
 	"image"
 	"image/color"
 	"os"
+	"strconv"
 )
 
 type Blob struct {
@@ -56,7 +57,7 @@ func main() {
 	}
 
 	// parse args
-	deviceID := os.Args[1]
+	videosource := os.Args[1]
 	model := os.Args[2]
 	config := os.Args[3]
 	backend := gocv.NetBackendDefault
@@ -69,13 +70,24 @@ func main() {
 		target = gocv.ParseNetTarget(os.Args[5])
 	}
 
-	// open capture device
-	webcam, err := gocv.OpenVideoCapture(deviceID)
+	// open capture device (webcam or file)
+	var (
+		capture *gocv.VideoCapture
+		err error
+	)
+
+	// If it is a number, open a video capture from webcam, else from file
+	id, err := strconv.Atoi(videosource)
+	if err == nil {
+		capture, err = gocv.OpenVideoCapture(id)
+	} else {
+		capture, err = gocv.VideoCaptureFile(videosource)
+	}
 	if err != nil {
-		fmt.Printf("Error opening video capture device: %v\n", deviceID)
+		fmt.Printf("Error opening video capture device: %v\n", videosource)
 		return
 	}
-	defer webcam.Close()
+	defer capture.Close()
 
 	// Create output window
 	window := gocv.NewWindow("DNN Detection")
@@ -97,11 +109,11 @@ func main() {
 	ratio := 1.0 / 127.5
 	mean := gocv.NewScalar(127.5, 127.5, 127.5, 0)
 
-	fmt.Printf("Start reading device: %v\n", deviceID)
+	fmt.Printf("Start reading device: %v\n", videosource)
 
 	for {
-		if ok := webcam.Read(&img); !ok {
-			fmt.Printf("Device closed: %v\n", deviceID)
+		if ok := capture.Read(&img); !ok {
+			fmt.Printf("Device closed: %v\n", videosource)
 			return
 		}
 		if img.Empty() {
