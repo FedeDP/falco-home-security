@@ -22,12 +22,12 @@ type Blob struct {
 	confidence float32
 }
 
-// See https://gist.github.com/AruniRC/7b3dadd004da04c80198557db5da4bda
+// See https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/
 type ClassID int
 const (
 	Human ClassID = 1
-	Cat = 16
-	Dog = 17
+	Cat = 17
+	Dog = 18
 )
 
 func (c ClassID) String() string {
@@ -48,6 +48,18 @@ func (c ClassID) Known() bool {
 		return true
 	}
 	return false
+}
+
+func (c ClassID) Color() color.RGBA {
+	switch c {
+	case Human:
+		return color.RGBA{B: 255}
+	case Cat:
+		return color.RGBA{G: 255}
+	case Dog:
+		return color.RGBA{R: 255}
+	}
+	return color.RGBA{}
 }
 
 func main() {
@@ -148,7 +160,6 @@ func main() {
 // [batchId, classId, confidence, left, top, right, bottom]
 func performDetection(frame *gocv.Mat, results gocv.Mat) []Blob {
 	var blobs []Blob
-	statusColor := color.RGBA{G: 255}
 	for i := 0; i < results.Total(); i += 7 {
 		confidence := results.GetFloatAt(0, i+2)
 		if confidence > 0.5 {
@@ -165,8 +176,8 @@ func performDetection(frame *gocv.Mat, results gocv.Mat) []Blob {
 					confidence: confidence,
 				})
 				status := fmt.Sprintf("type: %v, confidence: %v\n", c.String(), confidence)
-				gocv.PutText(frame, status, image.Pt(10, 20), gocv.FontHersheyPlain, 1.0, statusColor, 2)
-				gocv.Rectangle(frame, image.Rect(left, top, right, bottom), statusColor, 2)
+				gocv.PutText(frame, status, image.Pt(10, 20 * len(blobs)), gocv.FontHersheyPlain, 1.0, c.Color(), 2)
+				gocv.Rectangle(frame, image.Rect(left, top, right, bottom), c.Color(), 2)
 			}
 		}
 	}
