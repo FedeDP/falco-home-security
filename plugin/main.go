@@ -10,17 +10,37 @@ package main
 
 import (
 	"fmt"
-	"gocv.io/x/gocv"
 	"image"
 	"image/color"
-	"math"
 	"os"
 	"strconv"
+
+	"gocv.io/x/gocv"
+)
+
+const (
+	nFrames = 20
 )
 
 type Ring struct {
-	vals []float32
+	vals   []float32
 	cursor int
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+
+	return b
 }
 
 func (r *Ring) Push(val float32) {
@@ -31,7 +51,7 @@ func (r *Ring) Push(val float32) {
 
 func NewRing(size int) *Ring {
 	return &Ring{
-		vals:   make([]float32, size, size),
+		vals:   make([]float32, size),
 		cursor: 0,
 	}
 }
@@ -39,9 +59,9 @@ func NewRing(size int) *Ring {
 type ClassHistogram map[ClassID]*Ring
 
 type BlobPosition struct {
-	left  int
-	top int
-	right int
+	left   int
+	top    int
+	right  int
 	bottom int
 }
 
@@ -63,34 +83,30 @@ func (bp BlobPosition) Center() BlobCenter {
 	return BlobCenter{x, y}
 }
 
-func (bc BlobCenter) Near(other BlobCenter) int {
-	const threshold = 10
-
-	if Abs(bc.x - other.x) < threshold &&
-		Abs(bc.y - other.y) < threshold {
-
-		return (bc.x - other.x) + Abs(bc.y - other.y)
-	}
-	return math.MaxInt
+func (bc BlobCenter) Near(other BlobCenter) float64 {
+	xDiff := float64(minInt(bc.x, other.x)) / float64(maxInt(bc.x, other.x))
+	yDiff := float64(minInt(bc.y, other.y)) / float64(maxInt(bc.y, other.y))
+	return xDiff * yDiff
 }
 
 type Blob struct {
-	position BlobPosition
+	position             BlobPosition
 	cumulativeConfidence ClassHistogram
-	nframes int
+	nframes              int
 }
 
 type Blobs []Blob
 
 // See https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/
 type ClassID int
+
 const (
 	Human ClassID = 1
-	Cat = 17
-	Dog = 18
+	Cat           = 17
+	Dog           = 18
 )
 
-var Classes = []ClassID{ Human, Cat, Dog }
+var Classes = []ClassID{Human, Cat, Dog}
 
 func (c ClassID) String() string {
 	switch c {
@@ -128,8 +144,8 @@ func (b Blob) Mean(class ClassID) float32 {
 	sum := b.cumulativeConfidence.Sum(class)
 
 	div := b.nframes
-	if div > 8 {
-		div = 8
+	if div > nFrames {
+		div = nFrames
 	}
 	return sum / float32(div)
 }
@@ -144,7 +160,7 @@ func (ch ClassHistogram) Sum(class ClassID) float32 {
 
 func (ch ClassHistogram) Winner() ClassID {
 	var (
-		maxVal float32
+		maxVal   float32
 		maxClass ClassID
 	)
 	for class := range ch {
@@ -180,7 +196,7 @@ func main() {
 	// open capture device (webcam or file)
 	var (
 		capture *gocv.VideoCapture
-		err error
+		err     error
 	)
 
 	// If it is a number, open a video capture from webcam, else from file
@@ -258,11 +274,11 @@ func performDetection(frame *gocv.Mat, results gocv.Mat, oldBlobs Blobs) Blobs {
 	var blobs []Blob
 	for i := 0; i < results.Total(); i += 7 {
 		confidence := results.GetFloatAt(0, i+2)
-		if confidence > 0.5 {
+		if confidence > 0.75 {
 			pos := BlobPosition{
-				left: int(results.GetFloatAt(0, i+3) * float32(frame.Cols())),
-				top: int(results.GetFloatAt(0, i+4) * float32(frame.Rows())),
-				right: int(results.GetFloatAt(0, i+5) * float32(frame.Cols())),
+				left:   int(results.GetFloatAt(0, i+3) * float32(frame.Cols())),
+				top:    int(results.GetFloatAt(0, i+4) * float32(frame.Rows())),
+				right:  int(results.GetFloatAt(0, i+5) * float32(frame.Cols())),
 				bottom: int(results.GetFloatAt(0, i+6) * float32(frame.Rows())),
 			}
 			classId := int(results.GetFloatAt(0, i+1))
@@ -274,11 +290,11 @@ func performDetection(frame *gocv.Mat, results gocv.Mat, oldBlobs Blobs) Blobs {
 					fmt.Println("found new blob!")
 					// New blob!
 					blob = &Blob{
-						position: pos,
+						position:             pos,
 						cumulativeConfidence: make(map[ClassID]*Ring),
 					}
 					for _, class := range Classes {
-						blob.cumulativeConfidence[class] = NewRing(8)
+						blob.cumulativeConfidence[class] = NewRing(nFrames)
 					}
 				} else {
 					fmt.Println("found old blob!")
@@ -288,11 +304,10 @@ func performDetection(frame *gocv.Mat, results gocv.Mat, oldBlobs Blobs) Blobs {
 				blob.cumulativeConfidence[c].Push(confidence)
 				blobs = append(blobs, *blob)
 
-				if blob.nframes > 3 {
-					status := fmt.Sprintf("type: %v, confidence: %v, nframes: %v", c.String(), blob.Mean(blob.cumulativeConfidence.Winner()), blob.nframes)
-					gocv.PutText(frame, status, image.Pt(10, 20*len(blobs)), gocv.FontHersheyPlain, 1.0, blob.Color(), 2)
-					gocv.Rectangle(frame, image.Rect(pos.left, pos.top, pos.right, pos.bottom), blob.Color(), 2)
-				}
+				winner := blob.cumulativeConfidence.Winner()
+				status := fmt.Sprintf("type: %v, confidence: %v, nframes: %v", winner.String(), blob.Mean(winner), blob.nframes)
+				gocv.PutText(frame, status, image.Pt(10, 20*len(blobs)), gocv.FontHersheyPlain, 1.0, blob.Color(), 2)
+				gocv.Rectangle(frame, image.Rect(pos.left, pos.top, pos.right, pos.bottom), blob.Color(), 2)
 			}
 		}
 	}
@@ -304,7 +319,7 @@ func (bb Blobs) findNearest(center BlobCenter) *Blob {
 		return nil
 	}
 	var (
-		minVal = math.MaxInt
+		minVal     = 1.0
 		minValBlob *Blob
 	)
 	for _, b := range bb {
@@ -313,6 +328,10 @@ func (bb Blobs) findNearest(center BlobCenter) *Blob {
 			minVal = val
 			minValBlob = &b
 		}
+	}
+
+	if minVal < 0.8 {
+		return nil
 	}
 	return minValBlob
 }
