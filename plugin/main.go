@@ -21,6 +21,7 @@ type Blob struct {
 	confidence float32
 }
 
+// See https://gist.github.com/AruniRC/7b3dadd004da04c80198557db5da4bda
 type ClassID int
 const (
 	Human ClassID = 1
