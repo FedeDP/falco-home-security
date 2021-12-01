@@ -39,6 +39,6 @@
 - rule: Blob detected
   desc: We detected a blob
   condition: homesecurity.blob[cat] > 0
-  output: "A blob has been detected source=%homesecurity.source, ncats=%homesecurity.blob[cat], snap:%homesecurity.snapshot"
+  output: "A blob has been detected source=%homesecurity.source, ncats=%homesecurity.blob[cat], snapshot=file://%homesecurity.snapshot"
   priority: Warning
   source: homesecurity
