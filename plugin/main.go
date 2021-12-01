@@ -1,9 +1,9 @@
 // How to run:
 //
-// 		go run ./cmd/dnn-detection/main.go [videosource] [modelfile] [configfile]
+// 		go run ./cmd/dnn-blob/main.go [videosource] [modelfile] [configfile]
 //
 //  To use, first download models an extract them:
-//  * wget http://download.tensorflow.org/models/object_detection/ssd_mobilenet_v1_coco_2017_11_17.tar.gz (modelFile)
+//  * wget http://download.tensorflow.org/models/object_blob/ssd_mobilenet_v1_coco_2017_11_17.tar.gz (modelFile)
 //  * wget https://gist.githubusercontent.com/dkurt/45118a9c57c38677b65d6953ae62924a/raw/b0edd9e8c992c25fe1c804e77b06d20a89064871/ssd_mobilenet_v1_coco_2017_11_17.pbtxt (configFile)
 
 package main
@@ -11,171 +11,15 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"os"
 	"strconv"
 
 	"gocv.io/x/gocv"
 )
 
-const (
-	nFrames = 20
-)
-
-type Ring struct {
-	vals   []float32
-	cursor int
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-
-	return b
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-
-	return b
-}
-
-func (r *Ring) Push(val float32) {
-	r.vals[r.cursor] = val
-	r.cursor++
-	r.cursor %= len(r.vals)
-}
-
-func NewRing(size int) *Ring {
-	return &Ring{
-		vals:   make([]float32, size),
-		cursor: 0,
-	}
-}
-
-type ClassHistogram map[ClassID]*Ring
-
-type BlobPosition struct {
-	left   int
-	top    int
-	right  int
-	bottom int
-}
-
-type BlobCenter struct {
-	x int
-	y int
-}
-
-func Abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
-func (bp BlobPosition) Center() BlobCenter {
-	x := (bp.right - bp.left) / 2
-	y := (bp.bottom - bp.top) / 2
-	return BlobCenter{x, y}
-}
-
-func (bc BlobCenter) Near(other BlobCenter) float64 {
-	xDiff := float64(minInt(bc.x, other.x)) / float64(maxInt(bc.x, other.x))
-	yDiff := float64(minInt(bc.y, other.y)) / float64(maxInt(bc.y, other.y))
-	return xDiff * yDiff
-}
-
-type Blob struct {
-	position             BlobPosition
-	cumulativeConfidence ClassHistogram
-	nframes              int
-}
-
-type Blobs []Blob
-
-// See https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/
-type ClassID int
-
-const (
-	Human ClassID = 1
-	Cat           = 17
-	Dog           = 18
-)
-
-var Classes = []ClassID{Human, Cat, Dog}
-
-func (c ClassID) String() string {
-	switch c {
-	case Human:
-		return "Human"
-	case Cat:
-		return "Cat"
-	case Dog:
-		return "Dog"
-	}
-	return ""
-}
-
-func (c ClassID) Known() bool {
-	switch c {
-	case Human, Cat, Dog:
-		return true
-	}
-	return false
-}
-
-func (b Blob) Color() color.RGBA {
-	switch b.cumulativeConfidence.Winner() {
-	case Human:
-		return color.RGBA{B: 255}
-	case Cat:
-		return color.RGBA{G: 255}
-	case Dog:
-		return color.RGBA{R: 255}
-	}
-	return color.RGBA{}
-}
-
-func (b Blob) Mean(class ClassID) float32 {
-	sum := b.cumulativeConfidence.Sum(class)
-
-	div := b.nframes
-	if div > nFrames {
-		div = nFrames
-	}
-	return sum / float32(div)
-}
-
-func (ch ClassHistogram) Sum(class ClassID) float32 {
-	var sum float32
-	for _, val := range ch[class].vals {
-		sum += val
-	}
-	return sum
-}
-
-func (ch ClassHistogram) Winner() ClassID {
-	var (
-		maxVal   float32
-		maxClass ClassID
-	)
-	for class := range ch {
-		sum := ch.Sum(class)
-		if sum > maxVal {
-			maxVal = sum
-			maxClass = class
-		}
-	}
-	return maxClass
-}
-
 func main() {
 	if len(os.Args) < 4 {
-		fmt.Println("How to run:\ndnn-detection [videosource] [modelfile] [configfile]")
+		fmt.Println("How to run:\ndnn-blob [videosource] [modelfile] [configfile]")
 		return
 	}
 
@@ -234,7 +78,7 @@ func main() {
 
 	fmt.Printf("Start reading device: %v\n", videosource)
 
-	var blobs []Blob
+	var blobList BlobList
 	for {
 		if ok := capture.Read(&img); !ok {
 			fmt.Printf("Device closed: %v\n", videosource)
@@ -253,7 +97,11 @@ func main() {
 		// run a forward pass thru the network
 		prob := net.Forward("")
 
-		blobs = performDetection(&img, prob, blobs)
+		blobs := performBlob(&img, prob)
+		if blobList.Update(blobs) {
+			println("Blobs changed in the scene!")
+		}
+		DrawBlobs(&img, blobList.Blobs())
 
 		prob.Close()
 		blob.Close()
@@ -265,12 +113,12 @@ func main() {
 	}
 }
 
-// performDetection analyzes the results from the detector network,
+// performBlob analyzes the results from the detector network,
 // which produces an output blob with a shape 1x1xNx7
-// where N is the number of detections, and each detection
+// where N is the number of blobs, and each blob
 // is a vector of float values
 // [batchId, classId, confidence, left, top, right, bottom]
-func performDetection(frame *gocv.Mat, results gocv.Mat, oldBlobs Blobs) Blobs {
+func performBlob(frame *gocv.Mat, results gocv.Mat) []Blob {
 	var blobs []Blob
 	for i := 0; i < results.Total(); i += 7 {
 		confidence := results.GetFloatAt(0, i+2)
@@ -285,53 +133,21 @@ func performDetection(frame *gocv.Mat, results gocv.Mat, oldBlobs Blobs) Blobs {
 
 			c := ClassID(classId)
 			if c.Known() {
-				blob := oldBlobs.findNearest(pos.Center())
-				if blob == nil {
-					fmt.Println("found new blob!")
-					// New blob!
-					blob = &Blob{
-						position:             pos,
-						cumulativeConfidence: make(map[ClassID]*Ring),
-					}
-					for _, class := range Classes {
-						blob.cumulativeConfidence[class] = NewRing(nFrames)
-					}
-				} else {
-					fmt.Println("found old blob!")
-					blob.position = pos
-				}
-				blob.nframes++
-				blob.cumulativeConfidence[c].Push(confidence)
-				blobs = append(blobs, *blob)
-
-				winner := blob.cumulativeConfidence.Winner()
-				status := fmt.Sprintf("type: %v, confidence: %v, nframes: %v", winner.String(), blob.Mean(winner), blob.nframes)
-				gocv.PutText(frame, status, image.Pt(10, 20*len(blobs)), gocv.FontHersheyPlain, 1.0, blob.Color(), 2)
-				gocv.Rectangle(frame, image.Rect(pos.left, pos.top, pos.right, pos.bottom), blob.Color(), 2)
+				blobs = append(blobs, Blob{
+					Class:      c,
+					Confidence: float64(confidence),
+					Position:   pos,
+				})
 			}
 		}
 	}
 	return blobs
 }
 
-func (bb Blobs) findNearest(center BlobCenter) *Blob {
-	if bb == nil {
-		return nil
+func DrawBlobs(frame *gocv.Mat, blobs []Blob) {
+	for i, d := range blobs {
+		status := fmt.Sprintf("type: %v, confidence: %v", d.Class.String(), d.Confidence)
+		gocv.PutText(frame, status, image.Pt(10, 20*(len(blobs)-i)), gocv.FontHersheyPlain, 1.0, d.Color(), 2)
+		gocv.Rectangle(frame, image.Rect(d.Position.left, d.Position.top, d.Position.right, d.Position.bottom), d.Color(), 2)
 	}
-	var (
-		minVal     = 1.0
-		minValBlob *Blob
-	)
-	for _, b := range bb {
-		val := b.position.Center().Near(center)
-		if minVal > val {
-			minVal = val
-			minValBlob = &b
-		}
-	}
-
-	if minVal < 0.8 {
-		return nil
-	}
-	return minValBlob
 }
