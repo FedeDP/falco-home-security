@@ -145,7 +145,7 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 			// feed the blob into the detector
 			net.SetInput(blob, "")
 
-			// run a forward pass thru the network
+			// run a forward pass through the network
 			prob := net.Forward("")
 
 			blobs := performBlob(&img, prob, cfg.MinConfidence)
@@ -161,13 +161,19 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 				if err == nil {
 					videoEv.AsciiImage = aImg
 				} else {
-					fmt.Printf("error: %s", err.Error())
+					fmt.Printf("failed to generate ASCII image: %s", err.Error())
 				}
 
 				if len(oCfg.SnapshotPath) > 0 {
-					DrawBlobs(&img, blobList.Blobs(), &blobsDrawn)
+					DrawBlobs(&img, blobList.Blobs())
+					blobsDrawn = true
 					videoEv.SnapshotPath = oCfg.SnapshotPath + "/" + GetImageFileName()
-					gocv.IMWrite(videoEv.SnapshotPath, img)
+					err = os.MkdirAll(oCfg.SnapshotPath, os.ModePerm)
+					if err == nil || err == os.ErrExist {
+						gocv.IMWrite(videoEv.SnapshotPath, img)
+					} else {
+						fmt.Printf("failed to store snapshot: %s", err.Error())
+					}
 				}
 
 				select {
@@ -175,14 +181,15 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 					return
 				case detectionChan <- videoEv:
 				}
-
 			}
 
 			prob.Close()
 			blob.Close()
 
 			if oCfg.ShowWindow {
-				DrawBlobs(&img, blobList.Blobs(), &blobsDrawn)
+				if !blobsDrawn {
+					DrawBlobs(&img, blobList.Blobs())
+				}
 				select {
 				case <-quitc:
 					return
@@ -230,20 +237,15 @@ func GenerateAsciiImage(img *gocv.Mat) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	return string(Convert2Ascii(ScaleImage(goImg, 80))), nil
 }
 
-func DrawBlobs(frame *gocv.Mat, blobs []Blob, drawn *bool) {
-	if *drawn {
-		return
-	}
+func DrawBlobs(frame *gocv.Mat, blobs []Blob) {
 	for i, d := range blobs {
 		status := fmt.Sprintf("type: %v, confidence: %v", d.Class.String(), d.Confidence)
 		gocv.PutText(frame, status, image.Pt(10, 20*(len(blobs)-i)), gocv.FontHersheyPlain, 1.0, d.Color(), 2)
 		gocv.Rectangle(frame, image.Rect(d.Position.Left, d.Position.Top, d.Position.Right, d.Position.Bottom), d.Color(), 2)
 	}
-	*drawn = true
 }
 
 func GetImageFileName() string {
@@ -311,7 +313,7 @@ func main() {
 	oCfg := OpenConfig{
 		VideoSource:  videosource,
 		ShowWindow:   true,
-		SnapshotPath: "./snapshots",
+		SnapshotPath: "./snapshots/",
 	}
 
 	var window *gocv.Window
