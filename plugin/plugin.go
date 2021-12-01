@@ -5,37 +5,40 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strconv"
+	"log"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins/extractor"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins/source"
-	"gocv.io/x/gocv"
 )
+
+type OpenConfig struct {
+	VideoSource string `json:"videoSource"`
+	ShowWindow  bool   `json:"showWindow"`
+}
 
 type VideoPlugin struct {
 	plugins.BasePlugin
-	cfg *initConfig
+	cfg *DetectionConfig
 }
 
 type VideoInstance struct {
 	source.BaseInstance
-	capture *gocv.VideoCapture
-	net     *gocv.Net
+	cfg        *OpenConfig
+	detectionc DetectionChan
+	errorc     ErrorChan
+	quitc      QuitChan
+	wg         *sync.WaitGroup
 }
 
 // VideoEvent represents the event payload to be serialized
 type VideoEvent struct {
-}
-
-type initConfig struct {
-	VideoSource string `json:"videoSource"`
-	Model       string `json:"model"`
-	Backend     string `json:"backend"`
-	Target      string `json:"target"`
-	NetConfig   string `json:"netConfig"`
+	VideoSource string
+	Blobs       []Blob
 }
 
 func init() {
@@ -48,108 +51,107 @@ func init() {
 // general information about this plugin.
 // This method is mandatory for source plugins.
 func (m *VideoPlugin) Info() *plugins.Info {
+	log.Printf("[homesecurity] Info")
 	return &plugins.Info{
-		ID:                 999,
-		Name:               "home-security",
-		Description:        "Video recognition plugin",
-		Contact:            "github.com/FedeDP/falco-home-security",
-		Version:            "0.1.0",
-		RequiredAPIVersion: "0.2.0",
-		EventSource:        "video",
+		ID:                  999,
+		Name:                "homesecurity",
+		Description:         "Video recognition plugin",
+		Contact:             "github.com/FedeDP/falco-home-security",
+		Version:             "0.1.0",
+		RequiredAPIVersion:  "0.2.0",
+		EventSource:         "homesecurity",
+		ExtractEventSources: []string{"homesecurity"},
 	}
 }
 
 // Init initializes this plugin with a given config string, which is unused
 // in this example. This method is mandatory for source plugins.
 func (m *VideoPlugin) Init(config string) error {
-	cfg := initConfig{}
+	log.Printf("[homesecurity] Init")
+	cfg := DetectionConfig{
+		Model:                      "",
+		NetConfig:                  "",
+		Backend:                    "",
+		Target:                     "",
+		MinConfidence:              0.75,
+		MemoryMinConfidence:        0.5,
+		MemoryDecayFactor:          0.98,
+		MemoryNearnessThreshold:    0.65,
+		MemoryClassSwitchThreshold: 0.15,
+		MemoryCollapseMultiple:     true,
+	}
+
+	if len(config) == 0 {
+		println("no init")
+		return fmt.Errorf("you must specify an init configuration")
+	}
 
 	err := json.Unmarshal([]byte(config), &cfg)
 	if err != nil {
+		println(config)
+		println("init: " + err.Error())
 		return err
 	}
+
+	if len(cfg.Model) == 0 || len(cfg.NetConfig) == 0 {
+		println("init mandatory")
+		return fmt.Errorf("model and netConfig are mandatory init config parameters")
+	}
+
 	m.cfg = &cfg
-
 	return nil
-}
-
-// Fields return the list of extractor fields exported by this plugin.
-// This method is optional for source plugins, and enables the extraction
-// capabilities. If the Fields method is defined, the framework expects
-// an Extract method to be specified too.
-func (m *VideoPlugin) Fields() []sdk.FieldEntry {
-	return []sdk.FieldEntry{
-		{Type: "uint64", Name: "entity.count", Display: "Entities count", Desc: "Number of entities in the scene, use entity.count[<type>] to count a specific entity type (eg. cat, dog)"},
-	}
-}
-
-// This method is optional for source plugins, and enables the extraction
-// capabilities. If the Extract method is defined, the framework expects
-// an Fields method to be specified too.
-func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error {
-	var payload *VideoEvent
-	encoder := gob.NewDecoder(evt.Reader())
-	if err := encoder.Decode(payload); err != nil {
-		return err
-	}
-
-	switch req.FieldID() {
-	case 0: // entity.count
-		req.SetValue(0) // todo
-		return nil
-	// case 1:
-	// 	return nil
-	default:
-		return fmt.Errorf("unsupported field: %s", req.Field())
-	}
 }
 
 // Open opens the plugin source and starts a new capture session (e.g. stream
 // of events), creating a new plugin instance.
 func (m *VideoPlugin) Open(params string) (source.Instance, error) {
-	backend := gocv.ParseNetBackend(m.cfg.Backend)
-	target := gocv.ParseNetTarget(m.cfg.Target)
-
-	// open capture device (webcam or file)
-	var (
-		capture *gocv.VideoCapture
-		err     error
-	)
-
-	// If it is a number, open a video capture from webcam, else from file
-	id, err := strconv.Atoi(m.cfg.VideoSource)
-	if err == nil {
-		capture, err = gocv.OpenVideoCapture(id)
-	} else {
-		capture, err = gocv.VideoCaptureFile(m.cfg.VideoSource)
+	log.Printf("[homesecurity] Open")
+	cfg := OpenConfig{
+		VideoSource: "",
+		ShowWindow:  false,
 	}
+
+	if len(params) == 0 {
+		return nil, fmt.Errorf("you must specify an open configuration")
+	}
+
+	err := json.Unmarshal([]byte(params), &cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// open DNN object tracking model
-	net := gocv.ReadNet(m.cfg.Model, m.cfg.NetConfig)
-	if net.Empty() {
-		return nil, fmt.Errorf("Error reading network model from : %v %v", m.cfg.Model, m.cfg.NetConfig)
+	if len(cfg.VideoSource) == 0 {
+		return nil, fmt.Errorf("videoSource is a mandatory open config parameters")
 	}
-	net.SetPreferableBackend(backend)
-	net.SetPreferableTarget(target)
+	var wg sync.WaitGroup
+	quitc := make(QuitChan)
+	detectionc, errorc := LaunchVideoDetection(m.cfg, &cfg, quitc, &wg)
+	instance := &VideoInstance{
+		cfg:        &cfg,
+		detectionc: detectionc,
+		errorc:     errorc,
+		quitc:      quitc,
+		wg:         &wg,
+	}
 
-	return &VideoInstance{
-		capture: capture,
-		net:     &net,
-	}, nil
+	// Override event buffer
+	events, err := sdk.NewEventWriters(1, int64(sdk.DefaultEvtSize))
+	if err != nil {
+		return nil, err
+	}
+	instance.SetEvents(events)
+
+	return instance, err
 }
 
-// String produces a string representation of an event data produced by the
-// event source of this plugin. This method is mandatory for source plugins.
-func (m *VideoPlugin) String(in io.ReadSeeker) (string, error) {
-	var payload *VideoEvent
-	encoder := gob.NewDecoder(in)
-	if err := encoder.Decode(payload); err != nil {
-		return "", err
+func (m *VideoInstance) Close() {
+	log.Printf("[homesecurity] Close")
+	select {
+	case m.quitc <- true:
+	default:
 	}
-	return fmt.Sprintf("%#v", *payload), nil
+	m.wg.Wait()
+	close(m.quitc)
 }
 
 // NextBatch produces a batch of new events, and is called repeatedly by the
@@ -157,40 +159,95 @@ func (m *VideoPlugin) String(in io.ReadSeeker) (string, error) {
 // The batch has a maximum size that dependes on the size of the underlying
 // reusable memory buffer. A batch can be smaller than the maximum size.
 func (m *VideoInstance) NextBatch(pState sdk.PluginState, evts sdk.EventWriters) (int, error) {
-	var n int
-	var evt sdk.EventWriter
-	for n = 0; n < evts.Len(); n++ {
-		evt = evts.Get(n)
-		encoder := gob.NewEncoder(evt.Writer())
-		payload := VideoEvent{} // todo(leogr): fill the payload
+	log.Printf("[homesecurity] NextBatch")
+	evt := evts.Get(0)
+	writer := evt.Writer()
+	timeout := time.After(time.Millisecond * 1000)
+	select {
+	case blobs := <-m.detectionc:
+		encoder := gob.NewEncoder(writer)
+		payload := VideoEvent{
+			VideoSource: m.cfg.VideoSource,
+			Blobs:       blobs,
+		}
 		if err := encoder.Encode(&payload); err != nil {
 			return 0, err
 		}
 		evt.SetTimestamp(uint64(time.Now().UnixNano()))
+		return 1, nil
+	case err := <-m.errorc:
+		if err == errDeviceClosed {
+			return 0, sdk.ErrEOF
+		}
+		return 0, err
+	case <-timeout:
+		return 0, sdk.ErrTimeout
 	}
-	return n, nil
 }
 
-// Progress returns a percentage indicator referring to the production progress
-// of the event source of this plugin.
-// This method is optional for source plugins. If specified, the following
-// package needs to be imported to advise the SDK to enable this feature:
-// import _ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/progress"
-// func (m *VideoInstance) Progress(pState sdk.PluginState) (float64, string) {
-//
-// }
-
-func (m *VideoInstance) Close() {
-	m.capture.Close()
-	m.net.Close()
+// String produces a string representation of an event data produced by the
+// event source of this plugin. This method is mandatory for source plugins.
+func (m *VideoPlugin) String(in io.ReadSeeker) (string, error) {
+	log.Printf("[homesecurity] String")
+	var payload VideoEvent
+	encoder := gob.NewDecoder(in)
+	if err := encoder.Decode(&payload); err != nil {
+		return "", err
+	}
+	// todo: ascii art
+	return fmt.Sprintf("%#v", payload), nil
 }
 
-// Destroy is gets called by the SDK when the plugin gets deinitialized.
-// This is useful to release any open resource used by the plugin.
-// This method is optional for source plugins.
-// func (m *VideoPlugin) Destroy() {
-//
-// }
+// Fields return the list of extractor fields exported by this plugin.
+// This method is optional for source plugins, and enables the extraction
+// capabilities. If the Fields method is defined, the framework expects
+// an Extract method to be specified too.
+func (m *VideoPlugin) Fields() []sdk.FieldEntry {
+	log.Printf("[homesecurity] Fields")
+	return []sdk.FieldEntry{
+		{
+			Type:    "uint64",
+			Name:    "homesecurity.blob",
+			Display: "Count of the blobs detected in the scene",
+			Desc:    "Number of blobs in the scene, use video.blob[<type>] to count a specific blob type (eg. cat, dog)",
+		},
+		{
+			Type:    "string",
+			Name:    "homesecurity.source",
+			Display: "Name or label of the opened video source",
+			Desc:    "Name or label of the opened video source.",
+		},
+	}
+}
 
-// todo(leogr): temp disabled to avoid conflict with main.go
-// func main() {}
+// This method is optional for source plugins, and enables the extraction
+// capabilities. If the Extract method is defined, the framework expects
+// a Fields method to be specified too.
+func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error {
+	log.Printf("[homesecurity] Extract")
+	var payload VideoEvent
+	encoder := gob.NewDecoder(evt.Reader())
+	if err := encoder.Decode(&payload); err != nil {
+		return err
+	}
+
+	switch req.FieldID() {
+	case 0: // video.blob
+		count := uint64(len(payload.Blobs))
+		if len(req.Arg()) > 0 {
+			count = 0
+			for _, blob := range payload.Blobs {
+				if strings.EqualFold(blob.Class.String(), req.Arg()) {
+					count++
+				}
+			}
+		}
+		req.SetValue(count)
+		return nil
+	case 1: // video.source
+		req.SetValue(payload.VideoSource)
+		return nil
+	default:
+		return fmt.Errorf("unsupported field: %s", req.Field())
+	}
+}

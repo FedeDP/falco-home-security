@@ -56,10 +56,10 @@ func (c ClassID) Known() bool {
 }
 
 type BlobPosition struct {
-	left   int
-	top    int
-	right  int
-	bottom int
+	Left   int
+	Top    int
+	Right  int
+	Bottom int
 }
 
 type BlobPoint struct {
@@ -92,8 +92,8 @@ func maxInt(a, b int) int {
 }
 
 func (b BlobPosition) Center() BlobPoint {
-	x := (b.right - b.left) / 2
-	y := (b.bottom - b.top) / 2
+	x := (b.Right - b.Left) / 2
+	y := (b.Bottom - b.Top) / 2
 	return BlobPoint{x, y}
 }
 
@@ -142,10 +142,10 @@ func (b *BlobList) mergeAtIndex(blob Blob, index int) bool {
 		b.blobs[index].Class = blob.Class
 	}
 	// The position is the mean value of all the coordinates of the two blobs
-	b.blobs[index].Position.top = (b.blobs[index].Position.top + blob.Position.top) / 2
-	b.blobs[index].Position.left = (b.blobs[index].Position.left + blob.Position.left) / 2
-	b.blobs[index].Position.bottom = (b.blobs[index].Position.bottom + blob.Position.bottom) / 2
-	b.blobs[index].Position.right = (b.blobs[index].Position.right + blob.Position.right) / 2
+	b.blobs[index].Position.Top = (b.blobs[index].Position.Top + blob.Position.Top) / 2
+	b.blobs[index].Position.Left = (b.blobs[index].Position.Left + blob.Position.Left) / 2
+	b.blobs[index].Position.Bottom = (b.blobs[index].Position.Bottom + blob.Position.Bottom) / 2
+	b.blobs[index].Position.Right = (b.blobs[index].Position.Right + blob.Position.Right) / 2
 	return changed
 }
 
