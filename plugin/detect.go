@@ -2,28 +2,6 @@ package main
 
 import "image/color"
 
-const (
-	// At each refresh cycle, blobs are discarded if their confidence goes
-	// below this value.
-	blobConfidenceRefreshThreshold = 0.5
-
-	// At each refresh cycle, the confidence of each blob is reduced by
-	// this factor.
-	blobConfidenceRefreshRatio = 0.98
-
-	// While searching for near blobs, this is the minimum value required
-	// to consider two blob similars.
-	blobFindNearestThreshold = 0.65
-
-	// While merging a new blob with a new one, the new blob should surpass
-	// the condidence of the known blob by this threshold, in order to override
-	// its confidence and class values.
-	blobMergeConfidenceThreshold = 0.15
-
-	// Collapses all the near rectangles in a single one
-	blobMergeCloseRectangles = true
-)
-
 // See https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/
 type ClassID int
 
@@ -117,7 +95,7 @@ func (b Blob) Color() color.RGBA {
 
 // Given a new blob, returns the index of the most similar known blob.
 // If no blob is similar enough, -1 is returned.
-func (b *BlobList) findNearestIndex(blob Blob, merged map[int]bool) int {
+func (b *BlobList) findNearestIndex(blob Blob, merged map[int]bool, blobFindNearestThreshold float64) int {
 	maxNearness := 0.0
 	maxIndex := -1
 	for i, blob := range b.blobs {
@@ -132,7 +110,7 @@ func (b *BlobList) findNearestIndex(blob Blob, merged map[int]bool) int {
 }
 
 // Merges a new blob with a known one
-func (b *BlobList) mergeAtIndex(blob Blob, index int) bool {
+func (b *BlobList) mergeAtIndex(blob Blob, index int, blobMergeConfidenceThreshold float64) bool {
 	changed := false
 	// If the confidence of the new blob is better than the current
 	// one, both the confidence and the class are overridden.
@@ -151,7 +129,7 @@ func (b *BlobList) mergeAtIndex(blob Blob, index int) bool {
 
 // Decreases the confidence of all the known blobs.
 // If the confidence crosses a threshold, the blob is discarded.
-func (b *BlobList) refreshConfidence() {
+func (b *BlobList) refreshConfidence(blobConfidenceRefreshRatio, blobConfidenceRefreshThreshold float64) {
 	var newBlobs []Blob
 	for _, blob := range b.blobs {
 		blob.Confidence = blob.Confidence * blobConfidenceRefreshRatio
@@ -163,20 +141,21 @@ func (b *BlobList) refreshConfidence() {
 }
 
 // Adds new blob observations
-func (b *BlobList) Update(blobs []Blob) bool {
+func (b *BlobList) Update(blobs []Blob, cfg *DetectionConfig) bool {
 	changed := false
+
 	merged := make(map[int]bool)
-	b.refreshConfidence()
+	b.refreshConfidence(cfg.MemoryDecayFactor, cfg.MemoryMinConfidence)
 	for _, blob := range blobs {
-		nearestIndex := b.findNearestIndex(blob, merged)
+		nearestIndex := b.findNearestIndex(blob, merged, cfg.MemoryNearnessThreshold)
 		if nearestIndex < 0 {
 			b.blobs = append(b.blobs, blob)
 			changed = true
 		} else {
-			if b.mergeAtIndex(blob, nearestIndex) {
+			if b.mergeAtIndex(blob, nearestIndex, cfg.MemoryClassSwitchThreshold) {
 				changed = true
 			}
-			if !blobMergeCloseRectangles {
+			if !cfg.MemoryCollapseMultiple {
 				merged[nearestIndex] = true
 			}
 		}

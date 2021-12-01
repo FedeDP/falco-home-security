@@ -143,8 +143,8 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 			// run a forward pass thru the network
 			prob := net.Forward("")
 
-			blobs := performBlob(&img, prob)
-			if blobList.Update(blobs) {
+			blobs := performBlob(&img, prob, cfg.MinConfidence)
+			if blobList.Update(blobs, cfg) {
 				var imgPath string
 				if len(oCfg.SnapshotPath) > 0 {
 					imgPath = oCfg.SnapshotPath + "/" + GetImageFileName()
@@ -183,11 +183,11 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 // where N is the number of blobs, and each blob
 // is a vector of float values
 // [batchId, classId, confidence, left, top, right, bottom]
-func performBlob(frame *gocv.Mat, results gocv.Mat) []Blob {
+func performBlob(frame *gocv.Mat, results gocv.Mat, minConfidence float64) []Blob {
 	var blobs []Blob
 	for i := 0; i < results.Total(); i += 7 {
 		confidence := results.GetFloatAt(0, i+2)
-		if confidence > 0.75 {
+		if float64(confidence) > minConfidence {
 			pos := BlobPosition{
 				Left:   int(results.GetFloatAt(0, i+3) * float32(frame.Cols())),
 				Top:    int(results.GetFloatAt(0, i+4) * float32(frame.Rows())),
