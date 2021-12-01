@@ -3,39 +3,71 @@ package main
 import "image/color"
 
 // See https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/
+
 type ClassID int
+type CategoryID int
 
 const (
-	Human ClassID = 1
-	Animal ClassID = 2
+	Unknown    CategoryID = iota
+	Human      CategoryID = iota
+	Vehicle    CategoryID = iota
+	Outdoor    CategoryID = iota
+	Animal     CategoryID = iota
+	Accessory  CategoryID = iota
+	Sports     CategoryID = iota
+	Kitchen    CategoryID = iota
+	Food       CategoryID = iota
+	Furniture  CategoryID = iota
+	Electronic CategoryID = iota
+	Appliance  CategoryID = iota
+	Indoor     CategoryID = iota
 )
 
-var Classes = []ClassID{Human, Animal}
-
-func (c ClassID) String() string {
-	switch c {
-	case Human:
-		return "Human"
-	case Animal:
-		return "Animal"
-	}
-	return ""
+type categoryRange struct {
+	start int
+	end   int
 }
 
-func (c ClassID) Known() bool {
-	switch c {
-	case Human, Animal:
+var categoryRanges = map[CategoryID]categoryRange{
+	Human:      categoryRange{1, 1},
+	Vehicle:    categoryRange{2, 9},
+	Outdoor:    categoryRange{10, 15},
+	Animal:     categoryRange{16, 25},
+	Accessory:  categoryRange{26, 33},
+	Sports:     categoryRange{34, 43},
+	Kitchen:    categoryRange{44, 51},
+	Food:       categoryRange{52, 61},
+	Furniture:  categoryRange{62, 71},
+	Electronic: categoryRange{72, 77},
+	Appliance:  categoryRange{78, 83},
+	Indoor:     categoryRange{84, 91},
+}
+
+// Categories we want to handle
+var Categories = map[CategoryID]string{
+	Human:  "Human",
+	Animal: "Animal",
+}
+
+func (c CategoryID) String() string {
+	return Categories[c]
+}
+
+func (c CategoryID) Known() bool {
+	if _, ok := Categories[c]; ok {
 		return true
 	}
 	return false
 }
 
-func ParseClassID(classId int) ClassID {
-	// 16 -> Bird, 25 -> Giraffe
-	if classId >= 16 && classId <= 25 {
-		return Animal
+func ParseClassID(classId int) CategoryID {
+	for c, r := range categoryRanges {
+		if r.start <= classId && classId <= r.end {
+			return c
+		}
 	}
-	return ClassID(classId)
+
+	return Unknown
 }
 
 type BlobPosition struct {
@@ -51,7 +83,7 @@ type BlobPoint struct {
 }
 
 type Blob struct {
-	Class      ClassID
+	Category   CategoryID
 	Confidence float64
 	Position   BlobPosition
 }
@@ -87,7 +119,7 @@ func (b BlobPoint) Near(other BlobPoint) float64 {
 }
 
 func (b Blob) Color() color.RGBA {
-	switch b.Class {
+	switch b.Category {
 	case Human:
 		return color.RGBA{B: 255}
 	case Animal:
@@ -118,9 +150,9 @@ func (b *BlobList) mergeAtIndex(blob Blob, index int, blobMergeConfidenceThresho
 	// If the confidence of the new blob is better than the current
 	// one, both the confidence and the class are overridden.
 	if blob.Confidence >= b.blobs[index].Confidence+blobMergeConfidenceThreshold {
-		changed = b.blobs[index].Class != blob.Class
+		changed = b.blobs[index].Category != blob.Category
 		b.blobs[index].Confidence = blob.Confidence
-		b.blobs[index].Class = blob.Class
+		b.blobs[index].Category = blob.Category
 	}
 	// The position is the mean value of all the coordinates of the two blobs
 	b.blobs[index].Position.Top = (b.blobs[index].Position.Top + blob.Position.Top) / 2

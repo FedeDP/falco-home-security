@@ -18,8 +18,8 @@ import (
 )
 
 type OpenConfig struct {
-	VideoSource string `json:"videoSource"`
-	ShowWindow  bool   `json:"showWindow"`
+	VideoSource  string `json:"videoSource"`
+	ShowWindow   bool   `json:"showWindow"`
 	SnapshotPath string `json:"snapshotPath"`
 }
 
@@ -105,8 +105,8 @@ func (m *VideoPlugin) Init(config string) error {
 func (m *VideoPlugin) Open(params string) (source.Instance, error) {
 	log.Printf("[homesecurity] Open")
 	cfg := OpenConfig{
-		VideoSource: "",
-		ShowWindow:  false,
+		VideoSource:  "",
+		ShowWindow:   false,
 		SnapshotPath: "",
 	}
 
@@ -253,7 +253,7 @@ func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error
 		if len(req.Arg()) > 0 {
 			count = 0
 			for _, blob := range payload.Blobs {
-				if strings.EqualFold(blob.Class.String(), req.Arg()) {
+				if strings.EqualFold(blob.Category.String(), req.Arg()) {
 					count++
 				}
 			}

@@ -222,7 +222,7 @@ func performBlob(frame *gocv.Mat, results gocv.Mat, minConfidence float64) []Blo
 			c := ParseClassID(classId)
 			if c.Known() {
 				blobs = append(blobs, Blob{
-					Class:      c,
+					Category:   c,
 					Confidence: float64(confidence),
 					Position:   pos,
 				})
@@ -242,7 +242,7 @@ func GenerateAsciiImage(img *gocv.Mat) (string, error) {
 
 func DrawBlobs(frame *gocv.Mat, blobs []Blob) {
 	for i, d := range blobs {
-		status := fmt.Sprintf("type: %v, confidence: %v", d.Class.String(), d.Confidence)
+		status := fmt.Sprintf("type: %v, confidence: %v", d.Category.String(), d.Confidence)
 		gocv.PutText(frame, status, image.Pt(10, 20*(len(blobs)-i)), gocv.FontHersheyPlain, 1.0, d.Color(), 2)
 		gocv.Rectangle(frame, image.Rect(d.Position.Left, d.Position.Top, d.Position.Right, d.Position.Bottom), d.Color(), 2)
 	}
@@ -339,7 +339,12 @@ func main() {
 			fmt.Printf("Exiting: %v\n", e)
 			return
 		case evt := <-detectionc:
-			fmt.Printf("Blobs changed: \n%v\n", evt.AsciiImage)
+			fmt.Println("Blobs changed")
+			fmt.Printf("Categories:")
+			for _, blob := range evt.Blobs {
+				fmt.Printf(" %v", blob.Category.String())
+			}
+			fmt.Printf("\nASCII:\n%v\n", evt.AsciiImage)
 		case img := <-renderc:
 			if oCfg.ShowWindow {
 				window.IMShow(img)
