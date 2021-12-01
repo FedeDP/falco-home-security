@@ -129,7 +129,7 @@ func (m *VideoPlugin) Open(params string) (source.Instance, error) {
 	}
 
 	var wg sync.WaitGroup
-	quitc := make(QuitChan)
+	quitc := make(QuitChan, 1)
 	detectionc, renderc, errorc := LaunchVideoDetection(m.cfg, &cfg, quitc, &wg)
 	instance := &VideoInstance{
 		cfg:        &cfg,
@@ -153,11 +153,7 @@ func (m *VideoPlugin) Open(params string) (source.Instance, error) {
 
 func (m *VideoInstance) Close() {
 	log.Printf("[homesecurity] Close")
-	select {
-	case m.quitc <- true:
-	default:
-	}
-	m.wg.Wait()
+	m.quitc <- true
 	close(m.quitc)
 	if m.cfg.ShowWindow {
 		m.window.Close()
@@ -191,7 +187,7 @@ func (m *VideoInstance) NextBatch(pState sdk.PluginState, evts sdk.EventWriters)
 			if m.cfg.ShowWindow {
 				m.window.IMShow(img)
 				if m.window.WaitKey(1) >= 0 || m.window.GetWindowProperty(gocv.WindowPropertyVisible) == 0 {
-					return 0, fmt.Errorf("user quit the window")
+					return 0, sdk.ErrEOF
 				}
 			}
 		case <-timeout:

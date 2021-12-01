@@ -73,9 +73,7 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 	detectionChan := make(DetectionChan)
 	renderChan := make(RenderChan)
 	errorChan := make(ErrorChan)
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		defer close(detectionChan)
 		defer close(renderChan)
 		defer close(errorChan)
@@ -125,8 +123,12 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 			}
 
 			if ok := capture.Read(&img); !ok {
-				errorChan <- errDeviceClosed
-				return
+				select {
+				case <-quitc:
+					return
+				case errorChan <- errDeviceClosed:
+					return
+				}
 			}
 			if img.Empty() {
 				continue
@@ -148,11 +150,16 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 					imgPath = oCfg.SnapshotPath + "/" + GetImageFileName()
 					gocv.IMWrite(imgPath, img)
 				}
-				detectionChan <- VideoEvent{
+				select {
+				case <-quitc:
+					return
+				case detectionChan <- VideoEvent{
 					VideoSource: oCfg.VideoSource,
 					Blobs:       blobList.Blobs(),
 					SnapshotPath: imgPath,
+				}:
 				}
+
 			}
 
 			prob.Close()
@@ -160,7 +167,11 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 
 			if oCfg.ShowWindow {
 				DrawBlobs(&img, blobList.Blobs())
-				renderChan <- img
+				select {
+				case <-quitc:
+					return
+				case renderChan <- img:
+				}
 			}
 		}
 	}()
