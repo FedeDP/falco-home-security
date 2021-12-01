@@ -1,7 +1,3 @@
-// How to run:
-//
-// 		go run ./cmd/dnn-blob/main.go [videosource] [modelfile] [configfile]
-//
 //  To use, first download models an extract them:
 //  * wget http://download.tensorflow.org/models/object_blob/ssd_mobilenet_v1_coco_2017_11_17.tar.gz (modelFile)
 //  * wget https://gist.githubusercontent.com/dkurt/45118a9c57c38677b65d6953ae62924a/raw/b0edd9e8c992c25fe1c804e77b06d20a89064871/ssd_mobilenet_v1_coco_2017_11_17.pbtxt (configFile)
@@ -93,7 +89,7 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 
 		var window *gocv.Window
 		if oCfg.ShowWindow {
-			window = gocv.NewWindow("DNN Detection")
+			window = gocv.NewWindow("Falco Home Security")
 			defer window.Close()
 		}
 
@@ -150,8 +146,8 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 			if oCfg.ShowWindow {
 				DrawBlobs(&img, blobList.Blobs())
 				window.IMShow(img)
-				if window.WaitKey(1) >= 0 {
-					errorChan <- fmt.Errorf("user exit")
+				if window.WaitKey(1) >= 0 || window.GetWindowProperty(gocv.WindowPropertyVisible) == 0 {
+					errorChan <- fmt.Errorf("user quit")
 					return
 				}
 			}
@@ -201,7 +197,7 @@ func DrawBlobs(frame *gocv.Mat, blobs []Blob) {
 
 func main() {
 	if len(os.Args) < 4 {
-		fmt.Println("How to run:\ndnn-blob [videosource] [modelfile] [configfile]")
+		fmt.Println("How to run:\nplugin [videosource] [modelfile] [configfile]")
 		return
 	}
 
@@ -253,7 +249,8 @@ func main() {
 			case <-sigc:
 				quitc <- true
 				return
-			case <-errorc:
+			case e := <-errorc:
+				fmt.Printf("Exiting: %v\n", e)
 				return
 			case <-detectionc:
 				fmt.Println("Blobs changed")
