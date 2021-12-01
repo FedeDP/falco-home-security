@@ -7,30 +7,35 @@ type ClassID int
 
 const (
 	Human ClassID = 1
-	Cat   ClassID = 17
-	Dog   ClassID = 18
+	Animal ClassID = 16
 )
 
-var Classes = []ClassID{Human, Cat, Dog}
+var Classes = []ClassID{Human, Animal}
 
 func (c ClassID) String() string {
 	switch c {
 	case Human:
 		return "Human"
-	case Cat:
-		return "Cat"
-	case Dog:
-		return "Dog"
+	case Animal:
+		return "Animal"
 	}
 	return ""
 }
 
 func (c ClassID) Known() bool {
 	switch c {
-	case Human, Cat, Dog:
+	case Human, Animal:
 		return true
 	}
 	return false
+}
+
+func ParseClassID(classId int) ClassID {
+	// 16 -> Bird, 25 -> Giraffe
+	if classId >= 16 || classId <= 25 {
+		return Animal
+	}
+	return ClassID(classId)
 }
 
 type BlobPosition struct {
@@ -85,10 +90,8 @@ func (b Blob) Color() color.RGBA {
 	switch b.Class {
 	case Human:
 		return color.RGBA{B: 255}
-	case Cat:
+	case Animal:
 		return color.RGBA{G: 255}
-	case Dog:
-		return color.RGBA{R: 255}
 	}
 	return color.RGBA{}
 }

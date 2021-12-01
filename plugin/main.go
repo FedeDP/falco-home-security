@@ -196,7 +196,7 @@ func performBlob(frame *gocv.Mat, results gocv.Mat, minConfidence float64) []Blo
 			}
 			classId := int(results.GetFloatAt(0, i+1))
 
-			c := ClassID(classId)
+			c := ParseClassID(classId)
 			if c.Known() {
 				blobs = append(blobs, Blob{
 					Class:      c,
