@@ -14,6 +14,7 @@ import (
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins/extractor"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins/source"
+	"gocv.io/x/gocv"
 )
 
 type OpenConfig struct {
@@ -32,6 +33,8 @@ type VideoInstance struct {
 	detectionc DetectionChan
 	errorc     ErrorChan
 	quitc      QuitChan
+	renderc    RenderChan
+	window     *gocv.Window
 	wg         *sync.WaitGroup
 }
 
@@ -123,14 +126,22 @@ func (m *VideoPlugin) Open(params string) (source.Instance, error) {
 	if len(cfg.VideoSource) == 0 {
 		return nil, fmt.Errorf("videoSource is a mandatory open config parameters")
 	}
+
+	var window *gocv.Window
+	if cfg.ShowWindow {
+		window = gocv.NewWindow("Falco Home Security")
+	}
+
 	var wg sync.WaitGroup
 	quitc := make(QuitChan)
-	detectionc, errorc := LaunchVideoDetection(m.cfg, &cfg, quitc, &wg)
+	detectionc, renderc, errorc := LaunchVideoDetection(m.cfg, &cfg, quitc, &wg)
 	instance := &VideoInstance{
 		cfg:        &cfg,
 		detectionc: detectionc,
+		renderc:    renderc,
 		errorc:     errorc,
 		quitc:      quitc,
+		window:     window,
 		wg:         &wg,
 	}
 
@@ -152,6 +163,9 @@ func (m *VideoInstance) Close() {
 	}
 	m.wg.Wait()
 	close(m.quitc)
+	if m.cfg.ShowWindow {
+		m.window.Close()
+	}
 }
 
 // NextBatch produces a batch of new events, and is called repeatedly by the
@@ -163,25 +177,34 @@ func (m *VideoInstance) NextBatch(pState sdk.PluginState, evts sdk.EventWriters)
 	evt := evts.Get(0)
 	writer := evt.Writer()
 	timeout := time.After(time.Millisecond * 1000)
-	select {
-	case blobs := <-m.detectionc:
-		encoder := gob.NewEncoder(writer)
-		payload := VideoEvent{
-			VideoSource: m.cfg.VideoSource,
-			Blobs:       blobs,
-		}
-		if err := encoder.Encode(&payload); err != nil {
+	for {
+		select {
+		case blobs := <-m.detectionc:
+			encoder := gob.NewEncoder(writer)
+			payload := VideoEvent{
+				VideoSource: m.cfg.VideoSource,
+				Blobs:       blobs,
+			}
+			if err := encoder.Encode(&payload); err != nil {
+				return 0, err
+			}
+			evt.SetTimestamp(uint64(time.Now().UnixNano()))
+			return 1, nil
+		case err := <-m.errorc:
+			if err == errDeviceClosed {
+				return 0, sdk.ErrEOF
+			}
 			return 0, err
+		case img := <-m.renderc:
+			if m.cfg.ShowWindow {
+				m.window.IMShow(img)
+				if m.window.WaitKey(1) >= 0 || m.window.GetWindowProperty(gocv.WindowPropertyVisible) == 0 {
+					return 0, fmt.Errorf("user quit the window")
+				}
+			}
+		case <-timeout:
+			return 0, sdk.ErrTimeout
 		}
-		evt.SetTimestamp(uint64(time.Now().UnixNano()))
-		return 1, nil
-	case err := <-m.errorc:
-		if err == errDeviceClosed {
-			return 0, sdk.ErrEOF
-		}
-		return 0, err
-	case <-timeout:
-		return 0, sdk.ErrTimeout
 	}
 }
 

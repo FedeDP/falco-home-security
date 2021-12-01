@@ -17,7 +17,9 @@ import (
 	"gocv.io/x/gocv"
 )
 
-var errDeviceClosed = errors.New("devide has been closed")
+var errDeviceClosed = errors.New("device has been closed")
+
+type RenderChan chan gocv.Mat
 
 type QuitChan chan bool
 
@@ -59,13 +61,15 @@ type DetectionConfig struct {
 	MemoryCollapseMultiple bool `json:"memoryCollapseMultiple"`
 }
 
-func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan, wg *sync.WaitGroup) (DetectionChan, ErrorChan) {
+func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan, wg *sync.WaitGroup) (DetectionChan, RenderChan, ErrorChan) {
 	detectionChan := make(DetectionChan)
+	renderChan := make(RenderChan)
 	errorChan := make(ErrorChan)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer close(detectionChan)
+		defer close(renderChan)
 		defer close(errorChan)
 
 		var (
@@ -86,12 +90,6 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 			return
 		}
 		defer capture.Close()
-
-		var window *gocv.Window
-		if oCfg.ShowWindow {
-			window = gocv.NewWindow("Falco Home Security")
-			defer window.Close()
-		}
 
 		img := gocv.NewMat()
 		defer img.Close()
@@ -145,15 +143,11 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 
 			if oCfg.ShowWindow {
 				DrawBlobs(&img, blobList.Blobs())
-				window.IMShow(img)
-				if window.WaitKey(1) >= 0 || window.GetWindowProperty(gocv.WindowPropertyVisible) == 0 {
-					errorChan <- fmt.Errorf("user quit")
-					return
-				}
+				renderChan <- img
 			}
 		}
 	}()
-	return detectionChan, errorChan
+	return detectionChan, renderChan, errorChan
 }
 
 // performBlob analyzes the results from the detector network,
@@ -233,30 +227,38 @@ func main() {
 		ShowWindow:  true,
 	}
 
+	var window *gocv.Window
+	if oCfg.ShowWindow {
+		window = gocv.NewWindow("Falco Home Security")
+		defer window.Close()
+	}
+
 	var wg sync.WaitGroup
 	quitc := make(QuitChan)
-	detectionc, errorc := LaunchVideoDetection(&cfg, &oCfg, quitc, &wg)
-
+	detectionc, renderc, errorc := LaunchVideoDetection(&cfg, &oCfg, quitc, &wg)
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc,
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	go func() {
-		for {
-			select {
-			case <-sigc:
-				quitc <- true
-				return
-			case e := <-errorc:
-				fmt.Printf("Exiting: %v\n", e)
-				return
-			case <-detectionc:
-				fmt.Println("Blobs changed")
+	for {
+		select {
+		case <-sigc:
+			return
+		case e := <-errorc:
+			fmt.Printf("Exiting: %v\n", e)
+			return
+		case <-detectionc:
+			fmt.Println("Blobs changed")
+		case img := <-renderc:
+			if oCfg.ShowWindow {
+				window.IMShow(img)
+				if window.WaitKey(1) >= 0 || window.GetWindowProperty(gocv.WindowPropertyVisible) == 0 {
+					println("user quit")
+					return
+				}
 			}
 		}
-	}()
-	wg.Wait()
-	close(quitc)
+	}
 }
