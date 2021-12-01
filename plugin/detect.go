@@ -7,7 +7,7 @@ type ClassID int
 
 const (
 	Human ClassID = 1
-	Animal ClassID = 16
+	Animal ClassID = 2
 )
 
 var Classes = []ClassID{Human, Animal}
@@ -32,7 +32,7 @@ func (c ClassID) Known() bool {
 
 func ParseClassID(classId int) ClassID {
 	// 16 -> Bird, 25 -> Giraffe
-	if classId >= 16 || classId <= 25 {
+	if classId >= 16 && classId <= 25 {
 		return Animal
 	}
 	return ClassID(classId)
