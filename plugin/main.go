@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/nfnt/resize"
 	"image"
 	"os"
 	"os/signal"
@@ -18,15 +17,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nfnt/resize"
+
 	"gocv.io/x/gocv"
 )
 
 // VideoEvent represents the event payload to be serialized
 type VideoEvent struct {
-	VideoSource 		string
-	Blobs       		[]Blob
-	SnapshotPath 		string
-	AsciiImage			string
+	VideoSource  string
+	Blobs        []Blob
+	SnapshotPath string
+	AsciiImage   string
 }
 
 var errDeviceClosed = errors.New("device has been closed")
@@ -308,8 +309,9 @@ func main() {
 	}
 
 	oCfg := OpenConfig{
-		VideoSource: videosource,
-		ShowWindow:  true,
+		VideoSource:  videosource,
+		ShowWindow:   true,
+		SnapshotPath: "./snapshots",
 	}
 
 	var window *gocv.Window
