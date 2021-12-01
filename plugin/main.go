@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"gocv.io/x/gocv"
 )
@@ -91,7 +93,7 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 
 		var window *gocv.Window
 		if oCfg.ShowWindow {
-			window := gocv.NewWindow("DNN Detection")
+			window = gocv.NewWindow("DNN Detection")
 			defer window.Close()
 		}
 
@@ -149,7 +151,8 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 				DrawBlobs(&img, blobList.Blobs())
 				window.IMShow(img)
 				if window.WaitKey(1) >= 0 {
-					break
+					errorChan <- fmt.Errorf("user exit")
+					return
 				}
 			}
 		}
@@ -206,16 +209,57 @@ func main() {
 	videosource := os.Args[1]
 	model := os.Args[2]
 	config := os.Args[3]
-	backend := gocv.NetBackendDefault
+	var backend string
 	if len(os.Args) > 4 {
-		backend = gocv.ParseNetBackend(os.Args[4])
+		backend = os.Args[4]
 	}
 
-	target := gocv.NetTargetCPU
+	var target string
 	if len(os.Args) > 5 {
-		target = gocv.ParseNetTarget(os.Args[5])
+		target = os.Args[5]
 	}
 
-	fmt.Printf("Start reading device: %v\n", videosource)
+	cfg := DetectionConfig{
+		Model:                      model,
+		NetConfig:                  config,
+		Backend:                    backend,
+		Target:                     target,
+		MinConfidence:              0.75,
+		MemoryMinConfidence:        0.5,
+		MemoryDecayFactor:          0.98,
+		MemoryNearnessThreshold:    0.65,
+		MemoryClassSwitchThreshold: 0.15,
+		MemoryCollapseMultiple:     true,
+	}
 
+	oCfg := OpenConfig{
+		VideoSource: videosource,
+		ShowWindow:  true,
+	}
+
+	var wg sync.WaitGroup
+	quitc := make(QuitChan)
+	detectionc, errorc := LaunchVideoDetection(&cfg, &oCfg, quitc, &wg)
+
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	go func() {
+		for {
+			select {
+			case <-sigc:
+				quitc <- true
+				return
+			case <-errorc:
+				return
+			case <-detectionc:
+				fmt.Println("Blobs changed")
+			}
+		}
+	}()
+	wg.Wait()
+	close(quitc)
 }
