@@ -5,11 +5,14 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"github.com/nfnt/resize"
 	"image"
 	"os"
 	"os/signal"
+	"reflect"
 	"strconv"
 	"sync"
 	"syscall"
@@ -23,6 +26,7 @@ type VideoEvent struct {
 	VideoSource 		string
 	Blobs       		[]Blob
 	SnapshotPath 		string
+	AsciiImage			string
 }
 
 var errDeviceClosed = errors.New("device has been closed")
@@ -150,14 +154,23 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 					imgPath = oCfg.SnapshotPath + "/" + GetImageFileName()
 					gocv.IMWrite(imgPath, img)
 				}
-				select {
-				case <-quitc:
-					return
-				case detectionChan <- VideoEvent{
+
+				videoEv := VideoEvent{
 					VideoSource: oCfg.VideoSource,
 					Blobs:       blobList.Blobs(),
 					SnapshotPath: imgPath,
-				}:
+				}
+				goImg, err := img.ToImageYUV()
+				if err == nil {
+					videoEv.AsciiImage = string(Convert2Ascii(ScaleImage(goImg, 80)))
+				} else {
+					fmt.Printf("error: %s", err.Error())
+				}
+
+				select {
+				case <-quitc:
+					return
+				case detectionChan <- videoEv:
 				}
 
 			}
@@ -221,6 +234,29 @@ func GetImageFileName() string {
 	const layout = "01-02-2006_15.04.05.000"
 	t := time.Now()
 	return "Falco-" + t.Format(layout) + ".png"
+}
+
+func ScaleImage(img image.Image, w int) (image.Image, int, int) {
+	sz := img.Bounds()
+	h := (sz.Max.Y * w * 10) / (sz.Max.X * 16)
+	img = resize.Resize(uint(w), uint(h), img, resize.Lanczos3)
+	return img, w, h
+}
+
+func Convert2Ascii(img image.Image, w, h int) []byte {
+	var ASCIISTR = "@%#*+=-:. "
+	table := []byte(ASCIISTR)
+	buf := new(bytes.Buffer)
+
+	for i := 0; i < h; i++ {
+		for j := 0; j < w; j++ {
+			y := reflect.ValueOf(img.At(j, i)).FieldByName("Y").Uint()
+			pos := int(y) * (len(ASCIISTR) - 1) / 255
+			_ = buf.WriteByte(table[pos])
+		}
+		_ = buf.WriteByte('\n')
+	}
+	return buf.Bytes()
 }
 
 func main() {

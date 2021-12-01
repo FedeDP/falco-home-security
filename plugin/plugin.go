@@ -205,8 +205,7 @@ func (m *VideoPlugin) String(in io.ReadSeeker) (string, error) {
 	if err := encoder.Decode(&payload); err != nil {
 		return "", err
 	}
-	// todo: ascii art
-	return fmt.Sprintf("%#v", payload), nil
+	return payload.AsciiImage, nil
 }
 
 // Fields return the list of extractor fields exported by this plugin.

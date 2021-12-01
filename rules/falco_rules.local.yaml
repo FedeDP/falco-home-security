@@ -38,7 +38,7 @@
 # Add new rules, like this one
 - rule: Blob detected
   desc: We detected a blob
-  condition: homesecurity.blob[cat] > 0
-  output: "A blob has been detected source=%homesecurity.source, ncats=%homesecurity.blob[cat], snapshot=file://%homesecurity.snapshot"
+  condition: homesecurity.blob[animal] > 0
+  output: "A blob has been detected source=%homesecurity.source, ncats=%homesecurity.blob[animal], snapshot=file://%homesecurity.snapshot\n%evt.plugininfo"
   priority: Warning
   source: homesecurity
