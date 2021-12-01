@@ -20,6 +20,7 @@ import (
 type OpenConfig struct {
 	VideoSource string `json:"videoSource"`
 	ShowWindow  bool   `json:"showWindow"`
+	SnapshotPath string `json:"snapshotPath"`
 }
 
 type VideoPlugin struct {
@@ -36,12 +37,6 @@ type VideoInstance struct {
 	renderc    RenderChan
 	window     *gocv.Window
 	wg         *sync.WaitGroup
-}
-
-// VideoEvent represents the event payload to be serialized
-type VideoEvent struct {
-	VideoSource string
-	Blobs       []Blob
 }
 
 func init() {
@@ -112,6 +107,7 @@ func (m *VideoPlugin) Open(params string) (source.Instance, error) {
 	cfg := OpenConfig{
 		VideoSource: "",
 		ShowWindow:  false,
+		SnapshotPath: "",
 	}
 
 	if len(params) == 0 {
@@ -179,12 +175,8 @@ func (m *VideoInstance) NextBatch(pState sdk.PluginState, evts sdk.EventWriters)
 	timeout := time.After(time.Millisecond * 1000)
 	for {
 		select {
-		case blobs := <-m.detectionc:
+		case payload := <-m.detectionc:
 			encoder := gob.NewEncoder(writer)
-			payload := VideoEvent{
-				VideoSource: m.cfg.VideoSource,
-				Blobs:       blobs,
-			}
 			if err := encoder.Encode(&payload); err != nil {
 				return 0, err
 			}
@@ -237,13 +229,19 @@ func (m *VideoPlugin) Fields() []sdk.FieldEntry {
 		{
 			Type:    "string",
 			Name:    "homesecurity.source",
-			Display: "Name or label of the opened video source",
-			Desc:    "Name or label of the opened video source.",
+			Display: "Name of the opened video source",
+			Desc:    "Name of the opened video source.",
+		},
+		{
+			Type:    "string",
+			Name:    "homesecurity.snapshot",
+			Display: "Fullpath to last snapshot stored, if any",
+			Desc:    "Fullpath to last snapshot stored, if any",
 		},
 	}
 }
 
-// This method is optional for source plugins, and enables the extraction
+// Extract is optional for source plugins, and enables the extraction
 // capabilities. If the Extract method is defined, the framework expects
 // a Fields method to be specified too.
 func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error {
@@ -255,7 +253,7 @@ func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error
 	}
 
 	switch req.FieldID() {
-	case 0: // video.blob
+	case 0: // homesecurity.blob
 		count := uint64(len(payload.Blobs))
 		if len(req.Arg()) > 0 {
 			count = 0
@@ -266,11 +264,12 @@ func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error
 			}
 		}
 		req.SetValue(count)
-		return nil
-	case 1: // video.source
+	case 1: // homesecurity.source
 		req.SetValue(payload.VideoSource)
-		return nil
+	case 2: // homesecurity.snapshot
+		req.SetValue(payload.SnapshotPath)
 	default:
 		return fmt.Errorf("unsupported field: %s", req.Field())
 	}
+	return nil
 }

@@ -13,9 +13,17 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"gocv.io/x/gocv"
 )
+
+// VideoEvent represents the event payload to be serialized
+type VideoEvent struct {
+	VideoSource 		string
+	Blobs       		[]Blob
+	SnapshotPath 		string
+}
 
 var errDeviceClosed = errors.New("device has been closed")
 
@@ -23,7 +31,7 @@ type RenderChan chan gocv.Mat
 
 type QuitChan chan bool
 
-type DetectionChan chan []Blob
+type DetectionChan chan VideoEvent
 
 type ErrorChan chan error
 
@@ -102,8 +110,8 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 		}
 		defer net.Close()
 
-		net.SetPreferableBackend(gocv.ParseNetBackend(cfg.Backend))
-		net.SetPreferableTarget(gocv.ParseNetTarget(cfg.Target))
+		_ = net.SetPreferableBackend(gocv.ParseNetBackend(cfg.Backend))
+		_ = net.SetPreferableTarget(gocv.ParseNetTarget(cfg.Target))
 
 		ratio := 1.0 / 127.5
 		mean := gocv.NewScalar(127.5, 127.5, 127.5, 0)
@@ -135,7 +143,16 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 
 			blobs := performBlob(&img, prob)
 			if blobList.Update(blobs) {
-				detectionChan <- blobList.Blobs()
+				var imgPath string
+				if len(oCfg.SnapshotPath) > 0 {
+					imgPath = oCfg.SnapshotPath + "/" + GetImageFileName()
+					gocv.IMWrite(imgPath, img)
+				}
+				detectionChan <- VideoEvent{
+					VideoSource: oCfg.VideoSource,
+					Blobs:       blobList.Blobs(),
+					SnapshotPath: imgPath,
+				}
 			}
 
 			prob.Close()
@@ -187,6 +204,12 @@ func DrawBlobs(frame *gocv.Mat, blobs []Blob) {
 		gocv.PutText(frame, status, image.Pt(10, 20*(len(blobs)-i)), gocv.FontHersheyPlain, 1.0, d.Color(), 2)
 		gocv.Rectangle(frame, image.Rect(d.Position.Left, d.Position.Top, d.Position.Right, d.Position.Bottom), d.Color(), 2)
 	}
+}
+
+func GetImageFileName() string {
+	const layout = "01-02-2006_15.04.05.000"
+	t := time.Now()
+	return "Falco-" + t.Format(layout) + ".png"
 }
 
 func main() {
