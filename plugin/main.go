@@ -160,9 +160,10 @@ func LaunchVideoDetection(cfg *DetectionConfig, oCfg *OpenConfig, quitc QuitChan
 					Blobs:       blobList.Blobs(),
 					SnapshotPath: imgPath,
 				}
-				goImg, err := img.ToImageYUV()
+
+				aImg, err := GenerateAsciiImage(&img)
 				if err == nil {
-					videoEv.AsciiImage = string(Convert2Ascii(ScaleImage(goImg, 80)))
+					videoEv.AsciiImage = aImg
 				} else {
 					fmt.Printf("error: %s", err.Error())
 				}
@@ -220,6 +221,15 @@ func performBlob(frame *gocv.Mat, results gocv.Mat, minConfidence float64) []Blo
 		}
 	}
 	return blobs
+}
+
+func GenerateAsciiImage(img *gocv.Mat) (string, error) {
+	goImg, err := img.ToImageYUV()
+	if err != nil {
+		return "", err
+	}
+
+	return string(Convert2Ascii(ScaleImage(goImg, 80))), nil
 }
 
 func DrawBlobs(frame *gocv.Mat, blobs []Blob) {
@@ -319,8 +329,8 @@ func main() {
 		case e := <-errorc:
 			fmt.Printf("Exiting: %v\n", e)
 			return
-		case <-detectionc:
-			fmt.Println("Blobs changed")
+		case evt := <-detectionc:
+			fmt.Printf("Blobs changed: \n%v\n", evt.AsciiImage)
 		case img := <-renderc:
 			if oCfg.ShowWindow {
 				window.IMShow(img)
