@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -49,7 +48,6 @@ func init() {
 // general information about this plugin.
 // This method is mandatory for source plugins.
 func (m *VideoPlugin) Info() *plugins.Info {
-	log.Printf("[homesecurity] Info")
 	return &plugins.Info{
 		ID:                  999,
 		Name:                "homesecurity",
@@ -65,7 +63,6 @@ func (m *VideoPlugin) Info() *plugins.Info {
 // Init initializes this plugin with a given config string, which is unused
 // in this example. This method is mandatory for source plugins.
 func (m *VideoPlugin) Init(config string) error {
-	log.Printf("[homesecurity] Init")
 	cfg := DetectionConfig{
 		Model:                      "",
 		NetConfig:                  "",
@@ -103,7 +100,6 @@ func (m *VideoPlugin) Init(config string) error {
 // Open opens the plugin source and starts a new capture session (e.g. stream
 // of events), creating a new plugin instance.
 func (m *VideoPlugin) Open(params string) (source.Instance, error) {
-	log.Printf("[homesecurity] Open")
 	cfg := OpenConfig{
 		VideoSource:  "",
 		ShowWindow:   false,
@@ -152,7 +148,6 @@ func (m *VideoPlugin) Open(params string) (source.Instance, error) {
 }
 
 func (m *VideoInstance) Close() {
-	log.Printf("[homesecurity] Close")
 	m.quitc <- true
 	close(m.quitc)
 	if m.cfg.ShowWindow {
@@ -165,7 +160,6 @@ func (m *VideoInstance) Close() {
 // The batch has a maximum size that dependes on the size of the underlying
 // reusable memory buffer. A batch can be smaller than the maximum size.
 func (m *VideoInstance) NextBatch(pState sdk.PluginState, evts sdk.EventWriters) (int, error) {
-	log.Printf("[homesecurity] NextBatch")
 	evt := evts.Get(0)
 	writer := evt.Writer()
 	timeout := time.After(time.Millisecond * 1000)
@@ -199,7 +193,6 @@ func (m *VideoInstance) NextBatch(pState sdk.PluginState, evts sdk.EventWriters)
 // String produces a string representation of an event data produced by the
 // event source of this plugin. This method is mandatory for source plugins.
 func (m *VideoPlugin) String(in io.ReadSeeker) (string, error) {
-	log.Printf("[homesecurity] String")
 	var payload VideoEvent
 	encoder := gob.NewDecoder(in)
 	if err := encoder.Decode(&payload); err != nil {
@@ -213,7 +206,6 @@ func (m *VideoPlugin) String(in io.ReadSeeker) (string, error) {
 // capabilities. If the Fields method is defined, the framework expects
 // an Extract method to be specified too.
 func (m *VideoPlugin) Fields() []sdk.FieldEntry {
-	log.Printf("[homesecurity] Fields")
 	return []sdk.FieldEntry{
 		{
 			Type:    "uint64",
@@ -240,7 +232,6 @@ func (m *VideoPlugin) Fields() []sdk.FieldEntry {
 // capabilities. If the Extract method is defined, the framework expects
 // a Fields method to be specified too.
 func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error {
-	log.Printf("[homesecurity] Extract")
 	var payload VideoEvent
 	encoder := gob.NewDecoder(evt.Reader())
 	if err := encoder.Decode(&payload); err != nil {
