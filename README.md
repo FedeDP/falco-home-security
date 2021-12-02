@@ -68,10 +68,10 @@ where CAPTURE_DEV is either:
 * netConfig:
 * backend: opencv backend, between { halide, openvino, opencv, vulkan, cuda, default }
 * target: opencv target, between { cpu, fp32, fp16, vpu, vulkan, fpga, cuda, cudafp16 }
-* minConfidence: minimum confidence for new detected blobs
-* memoryMinConfidence: at each refresh cycle, blobs are discarded if their confidence goes below this value
+* minConfidence: minimum confidence for new detected entities
+* memoryMinConfidence: at each refresh cycle, entities are discarded if their confidence goes below this value
 * memoryDecayFactor: at each refresh cycle, the confidence of each blob is reduced by this factor
-* memoryNearnessThreshold: while searching for near blobs, this is the minimum value required to consider two blob similars
+* memoryNearnessThreshold: while searching for near entities, this is the minimum value required to consider two blob similars
 * memoryClassSwitchThreshold: while merging a new blob with a new one, the new blob should surpass the condidence of the known blob by this threshold, in order to override its confidence and class values.
 * memoryCollapseMultiple: collapses all the near rectangles in a single one
 

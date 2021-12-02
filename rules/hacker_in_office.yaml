@@ -1,0 +1,12 @@
+- required_engine_version: 10
+
+- required_plugin_versions:
+    - name: homesecurity
+      version: 0.1.0
+
+- rule: Hacker detected
+  desc: An hacker was detected
+  condition: video.entities[human] > 0
+  output: "HACKER!!! -> source=%video.source"
+  priority: Warning
+  source: homesecurity

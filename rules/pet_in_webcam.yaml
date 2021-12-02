@@ -1,0 +1,12 @@
+- required_engine_version: 10
+
+- required_plugin_versions:
+  - name: homesecurity
+    version: 0.1.0
+  
+- rule: Pet detected
+  desc: We detected a pretty pet
+  condition: video.entities[animal] > 0
+  output: "!!PET ALERT 😍!! -> source=%video.source, n_pets=%video.entities[animal]\n%evt.plugininfo"
+  priority: Warning
+  source: homesecurity

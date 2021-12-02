@@ -217,19 +217,19 @@ func (m *VideoPlugin) Fields() []sdk.FieldEntry {
 	return []sdk.FieldEntry{
 		{
 			Type:    "uint64",
-			Name:    "homesecurity.blob",
-			Display: "Count of the blobs detected in the scene",
-			Desc:    "Number of blobs in the scene, use video.blob[<type>] to count a specific blob type (eg. cat, dog)",
+			Name:    "video.entities",
+			Display: "Count of the entities detected in the scene",
+			Desc:    "Number of entities in the scene, use video.entities[<type>] to count a specific entity type between { human, animal }",
 		},
 		{
 			Type:    "string",
-			Name:    "homesecurity.source",
+			Name:    "video.source",
 			Display: "Name of the opened video source",
 			Desc:    "Name of the opened video source.",
 		},
 		{
 			Type:    "string",
-			Name:    "homesecurity.snapshot",
+			Name:    "video.snapshot",
 			Display: "Fullpath to last snapshot stored, if any",
 			Desc:    "Fullpath to last snapshot stored, if any",
 		},
@@ -248,7 +248,7 @@ func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error
 	}
 
 	switch req.FieldID() {
-	case 0: // homesecurity.blob
+	case 0: // video.entities
 		count := uint64(len(payload.Blobs))
 		if len(req.Arg()) > 0 {
 			count = 0
@@ -259,9 +259,9 @@ func (m *VideoPlugin) Extract(req sdk.ExtractRequest, evt sdk.EventReader) error
 			}
 		}
 		req.SetValue(count)
-	case 1: // homesecurity.source
+	case 1: // video.source
 		req.SetValue(payload.VideoSource)
-	case 2: // homesecurity.snapshot
+	case 2: // video.snapshot
 		req.SetValue(payload.SnapshotPath)
 	default:
 		return fmt.Errorf("unsupported field: %s", req.Field())

@@ -1,0 +1,12 @@
+- required_engine_version: 10
+
+- required_plugin_versions:
+    - name: homesecurity
+      version: 0.1.0
+
+- rule: Nearly human
+  desc: Human-like animal detected
+  condition: video.entities[human] = 0 and video.entities[animal] > 0
+  output: "Is that an human? -> source=%video.source, snapshot=file://%video.snapshot"
+  priority: Warning
+  source: homesecurity
