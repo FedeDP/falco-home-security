@@ -45,3 +45,47 @@ where CAPTURE_DEV is either:
 * index of webcam device
 * ip address for a network ip camera
 * path to video file
+
+## Plugin parameters
+
+### InitConfig
+```
+{
+  "model": "./models/ssd_mobilenet_v1_coco_2017_11_17/frozen_inference_graph.pb",
+  "netConfig": "./models/ssd_mobilenet_v1_coco_2017_11_17.pbtxt",
+  "backend": "",
+  "target": "",
+  "minConfidence": 0.75,
+  "memoryMinConfidence": 0.50,
+  "memoryDecayFactor": 0.98,
+  "memoryNearnessThreshold": 0.65,
+  "memoryClassSwitchThreshold": 0.15,
+  "memoryCollapseMultiple": true
+}
+```
+
+* model: path to pb model
+* netConfig:
+* backend: opencv backend, between { halide, openvino, opencv, vulkan, cuda, default }
+* target: opencv target, between { cpu, fp32, fp16, vpu, vulkan, fpga, cuda, cudafp16 }
+* minConfidence: minimum confidence for new detected blobs
+* memoryMinConfidence: at each refresh cycle, blobs are discarded if their confidence goes below this value
+* memoryDecayFactor: at each refresh cycle, the confidence of each blob is reduced by this factor
+* memoryNearnessThreshold: while searching for near blobs, this is the minimum value required to consider two blob similars
+* memoryClassSwitchThreshold: while merging a new blob with a new one, the new blob should surpass the condidence of the known blob by this threshold, in order to override its confidence and class values.
+* memoryCollapseMultiple: collapses all the near rectangles in a single one
+
+### OpenParams
+```
+{
+  "videoSource": "0", // /dev/video0
+  "showWindow": true,
+  "snapshotPath": "./snapshots"
+}
+```
+
+* videoSource: capture device to be used, see above CAPTURE_DEV
+* showWindow: whether to also show a GUI window
+* snapshotPath: folder where to store snapshots for each event; if not set, no snapshot will be taken
+
+
