@@ -4,9 +4,7 @@ import "image/color"
 
 // See https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/
 
-type ClassID int
 type CategoryID int
-
 const (
 	Unknown    CategoryID = iota
 	Human      CategoryID = iota
@@ -29,18 +27,18 @@ type categoryRange struct {
 }
 
 var categoryRanges = map[CategoryID]categoryRange{
-	Human:      categoryRange{1, 1},
-	Vehicle:    categoryRange{2, 9},
-	Outdoor:    categoryRange{10, 15},
-	Animal:     categoryRange{16, 25},
-	Accessory:  categoryRange{26, 33},
-	Sports:     categoryRange{34, 43},
-	Kitchen:    categoryRange{44, 51},
-	Food:       categoryRange{52, 61},
-	Furniture:  categoryRange{62, 71},
-	Electronic: categoryRange{72, 77},
-	Appliance:  categoryRange{78, 83},
-	Indoor:     categoryRange{84, 91},
+	Human:      {1, 1},
+	Vehicle:    {2, 9},
+	Outdoor:    {10, 15},
+	Animal:     {16, 25},
+	Accessory:  {26, 33},
+	Sports:     {34, 43},
+	Kitchen:    {44, 51},
+	Food:       {52, 61},
+	Furniture:  {62, 71},
+	Electronic: {72, 77},
+	Appliance:  {78, 83},
+	Indoor:     {84, 91},
 }
 
 // Categories we want to handle
@@ -66,7 +64,6 @@ func ParseClassID(classId int) CategoryID {
 			return c
 		}
 	}
-
 	return Unknown
 }
 
