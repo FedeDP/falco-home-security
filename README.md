@@ -10,7 +10,7 @@ Falco is here to protect your home!
 With this plugin, Falco will become your smart home protector;  
 Want to know how many people are in your home? How many cats? Here we are!
 
-Basically, the idea is to capture image from IP cameras/webcams around your house, and let Falco manage events coming from those, through a plugin!
+Basically, the idea is to capture frames from IP cameras/webcams around your house, and let Falco manage events coming from those, through a plugin!
 
 ## Setup
 
