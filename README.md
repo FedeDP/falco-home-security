@@ -17,8 +17,8 @@ Basically, the idea is to capture frames from IP cameras/webcams around your hou
 You obviously need Falco 0.31 (from master) that has plugins support enabled;  
 Moreover, a tensorflow model is required:  
 
-    $ wget http://download.tensorflow.org/models/object_blob/ssd_mobilenet_v1_coco_2017_11_17.tar.gz (modelFile)
-    $ wget https://gist.githubusercontent.com/dkurt/45118a9c57c38677b65d6953ae62924a/raw/b0edd9e8c992c25fe1c804e77b06d20a89064871/ssd_mobilenet_v1_coco_2017_11_17.pbtxt (configFile)
+    $ wget http://download.tensorflow.org/models/object_blob/ssd_mobilenet_v1_coco_2017_11_17.tar.gz
+    $ wget https://gist.githubusercontent.com/dkurt/45118a9c57c38677b65d6953ae62924a/raw/b0edd9e8c992c25fe1c804e77b06d20a89064871/ssd_mobilenet_v1_coco_2017_11_17.pbtxt
 
 Please be sure to extract that tarball.  
 
